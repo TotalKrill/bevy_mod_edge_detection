@@ -1,5 +1,7 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 #import bevy_render::view::View
+#import bevy_pbr::pbr_deferred_functions::pbr_input_from_deferred_gbuffer
+// #import bevy_pbr::mesh_view_bindings::deferred_prepass_texture
 
 struct Config {
     depth_threshold: f32,
@@ -14,8 +16,9 @@ struct Config {
 @group(0) @binding(1) var texture_sampler: sampler;
 @group(0) @binding(2) var depth_prepass_texture: texture_depth_2d;
 @group(0) @binding(3) var normal_prepass_texture: texture_2d<f32>;
-@group(0) @binding(4) var<uniform> view: View;
-@group(0) @binding(5) var<uniform> config: Config;
+@group(0) @binding(4) var deferred_prepass_texture: texture_2d<u32>;
+@group(0) @binding(5) var<uniform> view: View;
+@group(0) @binding(6) var<uniform> config: Config;
 
 /// Retrieve the perspective camera near clipping plane
 fn perspective_camera_near() -> f32 {
@@ -170,8 +173,11 @@ fn detect_edge_color(frag_coord: vec2f) -> f32 {
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4f {
     let color = textureSample(screen_texture, texture_sampler, in.uv);
-
-    if config.enabled == 1u {
+    let frag_coord = vec4(in.position.xy, 0.0, 0.0);
+    let deferred_data = textureLoad(deferred_prepass_texture, vec2<i32>(frag_coord.xy), 0);
+    let should_edge: bool = ((deferred_data[0] & (1u << 9)) != 0u);
+    
+    if config.enabled == 1u && should_edge {
         let frag_coord = in.position.xy;
         let edge_depth = detect_edge_depth(frag_coord);
         let edge_normal = detect_edge_normal(frag_coord);

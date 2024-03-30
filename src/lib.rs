@@ -4,6 +4,7 @@ use bevy::{
         core_3d::graph::{Core3d, Node3d},
         fullscreen_vertex_shader::fullscreen_shader_vertex_state,
     },
+    pbr::{DefaultOpaqueRendererMethod, MaterialExtension},
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
@@ -12,10 +13,11 @@ use bevy::{
             binding_types::{
                 sampler, texture_2d, texture_depth_2d, uniform_buffer, uniform_buffer_sized,
             },
-            BindGroupLayout, BindGroupLayoutEntries, CachedRenderPipelineId, ColorTargetState,
-            ColorWrites, FragmentState, MultisampleState, PipelineCache, PrimitiveState,
-            RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
-            ShaderType, TextureFormat, TextureSampleType, UniformBuffer,
+            AsBindGroup, BindGroupLayout, BindGroupLayoutEntries, CachedRenderPipelineId,
+            ColorTargetState, ColorWrites, FragmentState, MultisampleState, PipelineCache,
+            PrimitiveState, RenderPipelineDescriptor, Sampler, SamplerBindingType,
+            SamplerDescriptor, ShaderRef, ShaderStages, ShaderType, TextureFormat,
+            TextureSampleType, UniformBuffer,
         },
         renderer::{RenderDevice, RenderQueue},
         texture::BevyDefault,
@@ -37,6 +39,7 @@ impl Plugin for EdgeDetectionPlugin {
         load_internal_asset!(app, SHADER_HANDLE, "edge_detection.wgsl", Shader::from_wgsl);
         // app.add_systems(Update, print_projection);
 
+        app.init_resource::<DefaultOpaqueRendererMethod>();
         app.add_plugins(ExtractComponentPlugin::<EdgeDetectionCamera>::default());
 
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -58,6 +61,7 @@ impl Plugin for EdgeDetectionPlugin {
                     Node3d::EndMainPass,
                     EdgeDetetctionNodeLabel,
                     Node3d::Tonemapping,
+                    // Node3d::DeferredPrepass, // adding this makes the app not start
                 ),
             );
     }
@@ -93,6 +97,28 @@ impl Default for EdgeDetectionConfig {
             debug: 0,
             enabled: 1,
         }
+    }
+}
+
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct EdgeExtension {
+    #[uniform(100)]
+    _phantom: u32,
+}
+
+impl Default for EdgeExtension {
+    fn default() -> Self {
+        Self { _phantom: 0 }
+    }
+}
+
+impl MaterialExtension for EdgeExtension {
+    fn fragment_shader() -> ShaderRef {
+        "edge_detection.wgsl".into()
+    }
+
+    fn deferred_fragment_shader() -> ShaderRef {
+        "edge_detection.wgsl".into()
     }
 }
 
@@ -155,10 +181,14 @@ impl FromWorld for EdgeDetectionPipeline {
                     texture_depth_2d(),
                     // normal prepass
                     texture_2d(TextureSampleType::Float { filterable: true }),
+                    // deferred_texture
+                    texture_2d(TextureSampleType::Uint),
                     // view
                     uniform_buffer::<ViewUniform>(true),
                     // config
                     uniform_buffer_sized(false, None),
+                    // // deferred prepass
+                    // texture_2d(TextureSampleType::Float { filterable: true }),
                 ),
             ),
         );

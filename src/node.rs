@@ -1,5 +1,6 @@
 use bevy::{
     core_pipeline::prepass::ViewPrepassTextures,
+    log,
     prelude::*,
     render::{
         render_graph::{NodeRunError, RenderGraphContext, RenderLabel, ViewNode},
@@ -53,9 +54,12 @@ impl ViewNode for EdgeDetectionNode {
             return Ok(());
         };
 
-        let (Some(depth_texture), Some(normal_texture)) =
-            (&prepass_textures.depth, &prepass_textures.normal)
-        else {
+        let (Some(depth_texture), Some(normal_texture), Some(deferred_texture)) = (
+            &prepass_textures.depth,
+            &prepass_textures.normal,
+            &prepass_textures.deferred,
+        ) else {
+            log::error!("Not all required texture where avaialable");
             return Ok(());
         };
 
@@ -67,6 +71,7 @@ impl ViewNode for EdgeDetectionNode {
                 &edge_detection_pipeline.sampler,
                 &depth_texture.texture.default_view,
                 &normal_texture.texture.default_view,
+                &deferred_texture.texture.default_view,
                 view_uniforms,
                 &config_buffer.buffer,
             )),
