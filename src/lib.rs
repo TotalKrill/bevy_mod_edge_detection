@@ -32,11 +32,18 @@ use crate::node::EdgeDetetctionNodeLabel;
 mod node;
 
 pub const SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(410592619790336);
+pub const SHADER_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(410592619790337);
 
 pub struct EdgeDetectionPlugin;
 impl Plugin for EdgeDetectionPlugin {
     fn build(&self, app: &mut App) {
         load_internal_asset!(app, SHADER_HANDLE, "edge_detection.wgsl", Shader::from_wgsl);
+        load_internal_asset!(
+            app,
+            SHADER_MATERIAL_HANDLE,
+            "edge_detection_material.wgsl",
+            Shader::from_wgsl
+        );
         // app.add_systems(Update, print_projection);
 
         app.init_resource::<DefaultOpaqueRendererMethod>();
@@ -78,47 +85,51 @@ impl Plugin for EdgeDetectionPlugin {
 pub struct EdgeDetectionCamera;
 
 #[derive(Resource, ShaderType, Clone, Copy)]
+/// Determines how the edges are to be calculated, and how they will look
 pub struct EdgeDetectionConfig {
+    /// thickness of the edge calculations
+    pub thickness: f32,
     pub depth_threshold: f32,
     pub normal_threshold: f32,
     pub color_threshold: f32,
     pub edge_color: Color,
     pub debug: u32,
-    pub enabled: u32,
+    /// Determines if the edge detection should be for the entire screen,
+    /// or only for entites with the correct material
+    pub full_screen: u32,
 }
 
 impl Default for EdgeDetectionConfig {
     fn default() -> Self {
         Self {
+            thickness: 0.8,
             depth_threshold: 0.2,
             normal_threshold: 0.05,
             color_threshold: 1.0,
             edge_color: Color::BLACK,
             debug: 0,
-            enabled: 1,
+            full_screen: 1,
         }
     }
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
-pub struct EdgeExtension {
+/// Material that will enable the postprocess Edge detection effect on a specific entity, instead of entire screen
+pub struct EdgeDetectionMaterial {
     #[uniform(100)]
     _phantom: u32,
 }
 
-impl Default for EdgeExtension {
+impl Default for EdgeDetectionMaterial {
     fn default() -> Self {
         Self { _phantom: 0 }
     }
 }
 
-impl MaterialExtension for EdgeExtension {
-    fn fragment_shader() -> ShaderRef {
-        "edge_detection.wgsl".into()
-    }
-
+impl MaterialExtension for EdgeDetectionMaterial {
+    /// this material can only be used on deferred rendering
     fn deferred_fragment_shader() -> ShaderRef {
-        "edge_detection.wgsl".into()
+        SHADER_MATERIAL_HANDLE.into()
     }
 }
 

@@ -3,10 +3,10 @@ use bevy::{
         fxaa::{Fxaa, Sensitivity},
         prepass::{DeferredPrepass, DepthPrepass, NormalPrepass},
     },
-    pbr::{DefaultOpaqueRendererMethod, ExtendedMaterial, OpaqueRendererMethod},
+    pbr::{ExtendedMaterial, OpaqueRendererMethod},
     prelude::*,
 };
-use bevy_mod_edge_detection::{EdgeDetectionConfig, EdgeDetectionPlugin, EdgeExtension};
+use bevy_mod_edge_detection::{EdgeDetectionConfig, EdgeDetectionMaterial, EdgeDetectionPlugin};
 
 fn main() {
     App::new()
@@ -14,11 +14,11 @@ fn main() {
         .insert_resource(Msaa::Off)
         .add_plugins((DefaultPlugins, EdgeDetectionPlugin))
         .add_plugins(MaterialPlugin::<
-            ExtendedMaterial<StandardMaterial, EdgeExtension>,
+            ExtendedMaterial<StandardMaterial, EdgeDetectionMaterial>,
         >::default())
         .init_resource::<EdgeDetectionConfig>()
-        // .init_resource::<DefaultOpaqueRendererMethod>()
         .add_systems(Startup, setup)
+        .add_systems(Update, (rotate_things, keyboard_configuration_changing))
         .run();
 }
 
@@ -27,7 +27,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut extmaterials: ResMut<Assets<ExtendedMaterial<StandardMaterial, EdgeExtension>>>,
+    mut extmaterials: ResMut<Assets<ExtendedMaterial<StandardMaterial, EdgeDetectionMaterial>>>,
 ) {
     // set up the camera
     commands.spawn((
@@ -63,22 +63,28 @@ fn setup(
     stdmat.opaque_render_method = OpaqueRendererMethod::Deferred;
     let extmat = ExtendedMaterial {
         base: stdmat,
-        extension: EdgeExtension::default(),
+        extension: EdgeDetectionMaterial::default(),
     };
     // cube with extmat
-    commands.spawn(MaterialMeshBundle {
-        mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
-        material: extmaterials.add(extmat),
-        transform: Transform::from_xyz(0.0, 1.6, 0.0),
-        ..default()
-    });
+    commands.spawn((
+        MaterialMeshBundle {
+            mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+            material: extmaterials.add(extmat),
+            transform: Transform::from_xyz(0.0, 2., 0.0),
+            ..default()
+        },
+        Rotate,
+    ));
     // cube
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
-        material: materials.add(Color::rgb_u8(124, 144, 255)),
-        transform: Transform::from_xyz(0.0, 0.5, 0.0),
-        ..default()
-    });
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+            material: materials.add(Color::rgb_u8(124, 144, 255)),
+            transform: Transform::from_xyz(0.0, 0.7, 0.0),
+            ..default()
+        },
+        Rotate,
+    ));
     // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {
@@ -88,4 +94,33 @@ fn setup(
         transform: Transform::from_xyz(4.0, 8.0, 4.0),
         ..default()
     });
+}
+
+#[derive(Component)]
+struct Rotate;
+
+fn rotate_things(mut query: Query<&mut Transform, With<Rotate>>) {
+    for mut t in query.iter_mut() {
+        t.rotate_x(0.01);
+        t.rotate_y(0.005);
+    }
+}
+fn keyboard_configuration_changing(
+    button: Res<ButtonInput<KeyCode>>,
+    mut conf: ResMut<EdgeDetectionConfig>,
+) {
+    if button.just_pressed(KeyCode::Space) {
+        if conf.full_screen > 0 {
+            conf.full_screen = 0;
+        } else {
+            conf.full_screen = 1;
+        }
+    }
+    if button.just_pressed(KeyCode::KeyA) {
+        conf.thickness += 0.1;
+    }
+
+    if button.just_pressed(KeyCode::KeyS) {
+        conf.thickness -= 0.1;
+    }
 }
