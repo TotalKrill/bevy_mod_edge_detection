@@ -23,6 +23,9 @@ struct EdgeExtension {
 @group(2) @binding(100) 
 var<uniform> edge_extension: EdgeExtension;
 
+// this needs to be synced in the edge_detection.wgsl as well
+const BIT_OFFSET: u32 = 9u;
+
 @fragment
 fn fragment(
     in: VertexOutput,
@@ -34,7 +37,7 @@ fn fragment(
 #ifdef PREPASS_PIPELINE
     // in deferred mode we can't modify anything after that, as lighting is run in a separate fullscreen shader.
     var out = deferred_output(in, pbr_input);
-    out.deferred[0] = out.deferred[0] | (1u << 9);
+    out.deferred[0] = out.deferred[0] | (1u << BIT_OFFSET);
     // we can optionally modify the final result here
 #else
     var out: FragmentOutput;

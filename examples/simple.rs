@@ -3,20 +3,18 @@ use bevy::{
         fxaa::{Fxaa, Sensitivity},
         prepass::{DeferredPrepass, DepthPrepass, NormalPrepass},
     },
-    pbr::{ExtendedMaterial, OpaqueRendererMethod},
     prelude::*,
 };
-use bevy_mod_edge_detection::{EdgeDetectionConfig, EdgeDetectionMaterial, EdgeDetectionPlugin};
+use bevy_mod_edge_detection::prelude::*;
 
 fn main() {
     App::new()
         // MSAA currently doesn't work correctly with the plugin
         .insert_resource(Msaa::Off)
-        .add_plugins((DefaultPlugins, EdgeDetectionPlugin))
-        .add_plugins(MaterialPlugin::<
-            ExtendedMaterial<StandardMaterial, EdgeDetectionMaterial>,
-        >::default())
+        // EdgeDetectionConfig is initialized in the plugin, or can be added before to override it, or modified during runtime
         .init_resource::<EdgeDetectionConfig>()
+        .add_plugins((DefaultPlugins, EdgeDetectionPlugin))
+        .add_plugins(MaterialPlugin::<StandardEdgeDetectionMaterial>::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (rotate_things, keyboard_configuration_changing))
         .run();
@@ -27,7 +25,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut extmaterials: ResMut<Assets<ExtendedMaterial<StandardMaterial, EdgeDetectionMaterial>>>,
+    mut extmaterials: ResMut<Assets<StandardEdgeDetectionMaterial>>,
 ) {
     // set up the camera
     commands.spawn((
@@ -35,7 +33,7 @@ fn setup(
             transform: Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
-        // The edge detection effect requires the depth and normal prepass
+        // The edge detection effect requires the depth, normal as deferred prepass
         NormalPrepass,
         DepthPrepass,
         DeferredPrepass,
@@ -47,6 +45,8 @@ fn setup(
             edge_threshold_min: Sensitivity::Extreme,
         },
         bevy_mod_edge_detection::EdgeDetectionCamera,
+        // could also use the bundle of things needed for this effect
+        // bevy_mod_edge_detection::EdgeDetectionMarkerBundle,
     ));
 
     // set up basic scene
@@ -59,17 +59,12 @@ fn setup(
         ..default()
     });
 
-    let mut stdmat: StandardMaterial = Color::rgb_u8(124, 144, 255).into();
-    stdmat.opaque_render_method = OpaqueRendererMethod::Deferred;
-    let extmat = ExtendedMaterial {
-        base: stdmat,
-        extension: EdgeDetectionMaterial::default(),
-    };
+    let stdmat: StandardMaterial = Color::rgb_u8(124, 144, 255).into();
     // cube with extmat
     commands.spawn((
         MaterialMeshBundle {
             mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
-            material: extmaterials.add(extmat),
+            material: extmaterials.add(stdmat.clone().to_edge_material()),
             transform: Transform::from_xyz(0.0, 2., 0.0),
             ..default()
         },
@@ -79,7 +74,7 @@ fn setup(
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
-            material: materials.add(Color::rgb_u8(124, 144, 255)),
+            material: materials.add(stdmat),
             transform: Transform::from_xyz(0.0, 0.7, 0.0),
             ..default()
         },
@@ -94,6 +89,36 @@ fn setup(
         transform: Transform::from_xyz(4.0, 8.0, 4.0),
         ..default()
     });
+
+    let style = TextStyle {
+        font_size: 20.0,
+        ..default()
+    };
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(20.)),
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn(TextBundle {
+                text: Text::from_sections([TextSection::new(
+                    "Space: toggle fullscreen/entity edge detection",
+                    style.clone(),
+                )]),
+                ..default()
+            });
+            parent.spawn(TextBundle {
+                text: Text::from_sections([TextSection::new(
+                    "A/S: increase/decrease thickness",
+                    style.clone(),
+                )]),
+                ..default()
+            });
+        });
 }
 
 #[derive(Component)]
@@ -117,10 +142,10 @@ fn keyboard_configuration_changing(
         }
     }
     if button.just_pressed(KeyCode::KeyA) {
-        conf.thickness += 0.1;
+        conf.thickness += 1.;
     }
 
     if button.just_pressed(KeyCode::KeyS) {
-        conf.thickness -= 0.1;
+        conf.thickness -= 1.;
     }
 }

@@ -177,7 +177,7 @@ fn detect_edge_color(frag_coord: vec2f) -> f32 {
 fn detect_edge_mask(frag_coord: vec2f) -> bool {
     for (var i = 0; i < 9; i++) {
         let deferred = textureLoad(deferred_prepass_texture, vec2i(frag_coord + neighbours[i] * config.thickness), 0);
-        let should_edge: bool = ((deferred[0] & (1u << 9)) != 0u);
+        let should_edge: bool = ((deferred[0] & (1u << BIT_OFFSET)) != 0u);
         if (should_edge) {
             // pixel was within range of the coord
             return true;
@@ -186,6 +186,9 @@ fn detect_edge_mask(frag_coord: vec2f) -> bool {
     // no masked pixel was within range of the coord
     return false;
 }
+
+// this needs to be synced in the edge_detection_material.wgsl as well
+const BIT_OFFSET: u32 = 9u;
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4f {

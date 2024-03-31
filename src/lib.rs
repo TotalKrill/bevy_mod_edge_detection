@@ -3,8 +3,9 @@ use bevy::{
     core_pipeline::{
         core_3d::graph::{Core3d, Node3d},
         fullscreen_vertex_shader::fullscreen_shader_vertex_state,
+        prepass::{DeferredPrepass, DepthPrepass, NormalPrepass},
     },
-    pbr::{DefaultOpaqueRendererMethod, MaterialExtension},
+    pbr::{DefaultOpaqueRendererMethod, ExtendedMaterial, MaterialExtension},
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
@@ -27,6 +28,13 @@ use bevy::{
 };
 use node::EdgeDetectionNode;
 
+pub mod prelude {
+    pub use crate::{
+        traits::*, EdgeDetectionCamera, EdgeDetectionCameraMarkerBundle, EdgeDetectionConfig,
+        EdgeDetectionMaterial, EdgeDetectionPlugin, StandardEdgeDetectionMaterial,
+    };
+}
+
 use crate::node::EdgeDetetctionNodeLabel;
 
 mod node;
@@ -47,6 +55,7 @@ impl Plugin for EdgeDetectionPlugin {
         // app.add_systems(Update, print_projection);
 
         app.init_resource::<DefaultOpaqueRendererMethod>();
+        app.init_resource::<EdgeDetectionConfig>();
         app.add_plugins(ExtractComponentPlugin::<EdgeDetectionCamera>::default());
 
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -84,6 +93,17 @@ impl Plugin for EdgeDetectionPlugin {
 #[derive(Component, Clone, Copy, ExtractComponent)]
 pub struct EdgeDetectionCamera;
 
+#[derive(Bundle)]
+/// Marker components needed for the camera to run the edgedetection post-processing
+/// The edge detection effect requires the depth, normal as deferred prepass, as well as a specific marker component
+/// NOTE: they can all be added induvidially to the camera, in case some of the marker components are already present
+pub struct EdgeDetectionCameraMarkerBundle {
+    camera: EdgeDetectionCamera,
+    depth_prepass: DepthPrepass,
+    normal_prepass: NormalPrepass,
+    deferred_prepass: DeferredPrepass,
+}
+
 #[derive(Resource, ShaderType, Clone, Copy)]
 /// Determines how the edges are to be calculated, and how they will look
 pub struct EdgeDetectionConfig {
@@ -113,21 +133,64 @@ impl Default for EdgeDetectionConfig {
     }
 }
 
+/// The Extended Material type for edge-detection post-processing
+pub type EdgeDetectionMaterial<B> = ExtendedMaterial<B, EdgeDetectionMaterialExtension>;
+pub type StandardEdgeDetectionMaterial = EdgeDetectionMaterial<StandardMaterial>;
+
+pub mod traits {
+    use bevy::pbr::{Material, OpaqueRendererMethod, StandardMaterial};
+
+    use crate::{
+        EdgeDetectionMaterial, EdgeDetectionMaterialExtension, StandardEdgeDetectionMaterial,
+    };
+
+    /// have trait to make it easier to generate the material from standard material
+    pub trait ToEdgeMaterial: Material {
+        fn to_edge_material(self) -> EdgeDetectionMaterial<Self> {
+            EdgeDetectionMaterial {
+                base: self,
+                extension: EdgeDetectionMaterialExtension::default(),
+            }
+        }
+    }
+
+    impl ToEdgeMaterial for StandardMaterial {
+        fn to_edge_material(mut self) -> EdgeDetectionMaterial<StandardMaterial> {
+            self.opaque_render_method = OpaqueRendererMethod::Deferred;
+            EdgeDetectionMaterial {
+                base: self,
+                extension: EdgeDetectionMaterialExtension::default(),
+            }
+        }
+    }
+
+    /// have trait to make it easier to generate the material from standard material
+    pub trait FromEdgeMaterial<B: Material> {
+        fn from_edge_material(self) -> B;
+    }
+
+    impl FromEdgeMaterial<StandardMaterial> for StandardEdgeDetectionMaterial {
+        fn from_edge_material(self) -> StandardMaterial {
+            self.base
+        }
+    }
+}
+
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 /// Material that will enable the postprocess Edge detection effect on a specific entity, instead of entire screen
-pub struct EdgeDetectionMaterial {
+pub struct EdgeDetectionMaterialExtension {
     #[uniform(100)]
     _phantom: u32,
 }
 
-impl Default for EdgeDetectionMaterial {
+impl Default for EdgeDetectionMaterialExtension {
     fn default() -> Self {
         Self { _phantom: 0 }
     }
 }
 
-impl MaterialExtension for EdgeDetectionMaterial {
-    /// this material can only be used on deferred rendering
+impl MaterialExtension for EdgeDetectionMaterialExtension {
+    /// this material will only work in in deferred rendering
     fn deferred_fragment_shader() -> ShaderRef {
         SHADER_MATERIAL_HANDLE.into()
     }

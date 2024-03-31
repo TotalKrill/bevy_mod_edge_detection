@@ -3,7 +3,7 @@ use std::f32::consts::{FRAC_PI_2, PI};
 use bevy::{
     core_pipeline::{
         fxaa::{Fxaa, Sensitivity},
-        prepass::{DepthPrepass, NormalPrepass},
+        prepass::{DeferredPrepass, DepthPrepass, NormalPrepass},
     },
     diagnostic::{Diagnostic, DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     math::vec3,
@@ -55,6 +55,7 @@ fn setup_camera(mut commands: Commands) {
         },
         DepthPrepass,
         NormalPrepass,
+        DeferredPrepass,
         Fxaa {
             enabled: true,
             edge_threshold: Sensitivity::Extreme,
@@ -209,8 +210,8 @@ fn update_config(mut config: ResMut<EdgeDetectionConfig>, key_input: Res<ButtonI
         println!("debug: {:?}", config.debug != 0);
     }
     if key_input.just_pressed(KeyCode::KeyC) {
-        config.enabled = (config.enabled + 1) % 2;
-        println!("enabled: {:?}", config.enabled != 0);
+        config.full_screen = (config.full_screen + 1) % 2;
+        println!("enabled: {:?}", config.full_screen != 0);
     }
 }
 
