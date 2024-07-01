@@ -54,28 +54,48 @@ impl ViewNode for EdgeDetectionNode {
             return Ok(());
         };
 
-        let (Some(depth_texture), Some(normal_texture), Some(deferred_texture)) = (
+        let bind_group = match (
             &prepass_textures.depth,
             &prepass_textures.normal,
             &prepass_textures.deferred,
-        ) else {
-            log::error!("Not all required texture where avaialable");
-            return Ok(());
-        };
+        ) {
+            (Some(depth_texture), Some(normal_texture), Some(deferred_texture)) => {
+                render_context.render_device().create_bind_group(
+                    "edge_detection_bind_group",
+                    &edge_detection_pipeline.layout,
+                    &BindGroupEntries::sequential((
+                        post_process.source,
+                        &edge_detection_pipeline.sampler,
+                        &depth_texture.texture.default_view,
+                        &normal_texture.texture.default_view,
+                        view_uniforms,
+                        &config_buffer.buffer,
+                        &deferred_texture.texture.default_view,
+                    )),
+                )
+            }
 
-        let bind_group = render_context.render_device().create_bind_group(
-            "edge_detection_bind_group",
-            &edge_detection_pipeline.layout,
-            &BindGroupEntries::sequential((
-                post_process.source,
-                &edge_detection_pipeline.sampler,
-                &depth_texture.texture.default_view,
-                &normal_texture.texture.default_view,
-                &deferred_texture.texture.default_view,
-                view_uniforms,
-                &config_buffer.buffer,
-            )),
-        );
+            (Some(depth_texture), Some(normal_texture), None) => {
+                log::warn!("Edge detection initialized but without per entity capability");
+                render_context.render_device().create_bind_group(
+                    "full_screen_edge_detection_bind_group",
+                    &edge_detection_pipeline.layout,
+                    &BindGroupEntries::sequential((
+                        post_process.source,
+                        &edge_detection_pipeline.sampler,
+                        &depth_texture.texture.default_view,
+                        &normal_texture.texture.default_view,
+                        // &deferred_texture.texture.default_view,
+                        view_uniforms,
+                        &config_buffer.buffer,
+                    )),
+                )
+            }
+            _ => {
+                log::error!("Not all required texture where avaialable");
+                return Ok(());
+            }
+        };
 
         let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {
             label: Some("edge_detection_pass"),

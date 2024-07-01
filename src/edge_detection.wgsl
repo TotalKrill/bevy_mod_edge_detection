@@ -17,9 +17,9 @@ struct Config {
 @group(0) @binding(1) var texture_sampler: sampler;
 @group(0) @binding(2) var depth_prepass_texture: texture_depth_2d;
 @group(0) @binding(3) var normal_prepass_texture: texture_2d<f32>;
-@group(0) @binding(4) var deferred_prepass_texture: texture_2d<u32>;
-@group(0) @binding(5) var<uniform> view: View;
-@group(0) @binding(6) var<uniform> config: Config;
+@group(0) @binding(4) var<uniform> view: View;
+@group(0) @binding(5) var<uniform> config: Config;
+@group(0) @binding(6) var deferred_prepass_texture: texture_2d<u32>;
 
 /// Retrieve the perspective camera near clipping plane
 fn perspective_camera_near() -> f32 {

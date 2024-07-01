@@ -255,12 +255,12 @@ impl FromWorld for EdgeDetectionPipeline {
                     texture_depth_2d(),
                     // normal prepass
                     texture_2d(TextureSampleType::Float { filterable: true }),
-                    // deferred_texture
-                    texture_2d(TextureSampleType::Uint),
                     // view
                     uniform_buffer::<ViewUniform>(true),
                     // config
                     uniform_buffer_sized(false, None),
+                    // deferred_texture
+                    texture_2d(TextureSampleType::Uint),
                     // // deferred prepass
                     // texture_2d(TextureSampleType::Float { filterable: true }),
                 ),
