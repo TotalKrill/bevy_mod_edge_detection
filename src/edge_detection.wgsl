@@ -10,7 +10,9 @@ struct Config {
     color_threshold: f32,
     edge_color: vec4f,
     debug: u32,
+    #ifdef EDGE_DETECTION_MATERIAL
     full_screen: u32,
+    #endif
 };
 
 @group(0) @binding(0) var screen_texture: texture_2d<f32>;
@@ -19,7 +21,10 @@ struct Config {
 @group(0) @binding(3) var normal_prepass_texture: texture_2d<f32>;
 @group(0) @binding(4) var<uniform> view: View;
 @group(0) @binding(5) var<uniform> config: Config;
+
+#ifdef EDGE_DETECTION_MATERIAL
 @group(0) @binding(6) var deferred_prepass_texture: texture_2d<u32>;
+#endif
 
 /// Retrieve the perspective camera near clipping plane
 fn perspective_camera_near() -> f32 {
@@ -172,6 +177,7 @@ fn detect_edge_color(frag_coord: vec2f) -> f32 {
     return edge;
 }
 
+#ifdef EDGE_DETECTION_MATERIAL
 // checks nearby pixels for being part of the mask, this is to help give the thickness even on the pixels outside of the
 // selected entity
 fn detect_edge_mask(frag_coord: vec2f) -> bool {
@@ -186,6 +192,7 @@ fn detect_edge_mask(frag_coord: vec2f) -> bool {
     // no masked pixel was within range of the coord
     return false;
 }
+#endif
 
 // this needs to be synced in the edge_detection_material.wgsl as well
 const BIT_OFFSET: u32 = 9u;
@@ -195,9 +202,12 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4f {
     let color = textureSample(screen_texture, texture_sampler, in.uv);
     
     let frag_coord = in.position.xy;
-    let should_draw_edge: bool = detect_edge_mask(frag_coord);
     
+    #ifdef EDGE_DETECTION_MATERIAL
+    let should_draw_edge: bool = detect_edge_mask(frag_coord);
     if config.full_screen == 1u || should_draw_edge {
+    #endif
+    
         let edge_depth = detect_edge_depth(frag_coord);
         let edge_normal = detect_edge_normal(frag_coord);
         let edge_color = detect_edge_color(frag_coord);
@@ -210,7 +220,9 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4f {
         if edge > 0.01 {
             return config.edge_color;
         }
+    #ifdef EDGE_DETECTION_MATERIAL
     }
+    #endif
 
     return color;
 }

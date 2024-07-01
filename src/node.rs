@@ -54,47 +54,58 @@ impl ViewNode for EdgeDetectionNode {
             return Ok(());
         };
 
-        let bind_group = match (
+        #[cfg(feature = "edge-detection-material")]
+        let bind_group = if let (
+            Some(depth_texture),
+            Some(normal_texture),
+            Some(deferred_texture),
+        ) = (
             &prepass_textures.depth,
             &prepass_textures.normal,
             &prepass_textures.deferred,
         ) {
-            (Some(depth_texture), Some(normal_texture), Some(deferred_texture)) => {
-                render_context.render_device().create_bind_group(
-                    "edge_detection_bind_group",
-                    &edge_detection_pipeline.layout,
-                    &BindGroupEntries::sequential((
-                        post_process.source,
-                        &edge_detection_pipeline.sampler,
-                        &depth_texture.texture.default_view,
-                        &normal_texture.texture.default_view,
-                        view_uniforms,
-                        &config_buffer.buffer,
-                        &deferred_texture.texture.default_view,
-                    )),
-                )
-            }
+            render_context.render_device().create_bind_group(
+                "edge_detection_bind_group",
+                &edge_detection_pipeline.layout,
+                &BindGroupEntries::sequential((
+                    post_process.source,
+                    &edge_detection_pipeline.sampler,
+                    &depth_texture.texture.default_view,
+                    &normal_texture.texture.default_view,
+                    view_uniforms,
+                    &config_buffer.buffer,
+                    &deferred_texture.texture.default_view,
+                )),
+            )
+        } else {
+            log::error!(
+                    "Not all required textures for entity_edge_detection where avaialable (depth_texture, normal_texture, deferred_texture)"
+                );
+            return Ok(());
+        };
 
-            (Some(depth_texture), Some(normal_texture), None) => {
-                log::warn!("Edge detection initialized but without per entity capability");
-                render_context.render_device().create_bind_group(
-                    "full_screen_edge_detection_bind_group",
-                    &edge_detection_pipeline.layout,
-                    &BindGroupEntries::sequential((
-                        post_process.source,
-                        &edge_detection_pipeline.sampler,
-                        &depth_texture.texture.default_view,
-                        &normal_texture.texture.default_view,
-                        // &deferred_texture.texture.default_view,
-                        view_uniforms,
-                        &config_buffer.buffer,
-                    )),
-                )
-            }
-            _ => {
-                log::error!("Not all required texture where avaialable");
-                return Ok(());
-            }
+        #[cfg(not(feature = "edge-detection-material"))]
+        let bind_group = if let (Some(depth_texture), Some(normal_texture)) =
+            (&prepass_textures.depth, &prepass_textures.normal)
+        {
+            // log::warn!("Edge detection initialized but without per entity capability");
+            render_context.render_device().create_bind_group(
+                "full_screen_edge_detection_bind_group",
+                &edge_detection_pipeline.layout,
+                &BindGroupEntries::sequential((
+                    post_process.source,
+                    &edge_detection_pipeline.sampler,
+                    &depth_texture.texture.default_view,
+                    &normal_texture.texture.default_view,
+                    view_uniforms,
+                    &config_buffer.buffer,
+                )),
+            )
+        } else {
+            log::error!(
+                "Not all required textures where avaialable (depth_texture, normal_texture)"
+            );
+            return Ok(());
         };
 
         let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {

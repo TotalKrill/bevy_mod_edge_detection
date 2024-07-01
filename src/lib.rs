@@ -3,9 +3,9 @@ use bevy::{
     core_pipeline::{
         core_3d::graph::{Core3d, Node3d},
         fullscreen_vertex_shader::fullscreen_shader_vertex_state,
-        prepass::{DeferredPrepass, DepthPrepass, NormalPrepass},
+        prepass::{DepthPrepass, NormalPrepass},
     },
-    pbr::{DefaultOpaqueRendererMethod, ExtendedMaterial, MaterialExtension},
+    pbr::DefaultOpaqueRendererMethod,
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
@@ -14,11 +14,10 @@ use bevy::{
             binding_types::{
                 sampler, texture_2d, texture_depth_2d, uniform_buffer, uniform_buffer_sized,
             },
-            AsBindGroup, BindGroupLayout, BindGroupLayoutEntries, CachedRenderPipelineId,
-            ColorTargetState, ColorWrites, FragmentState, MultisampleState, PipelineCache,
-            PrimitiveState, RenderPipelineDescriptor, Sampler, SamplerBindingType,
-            SamplerDescriptor, ShaderRef, ShaderStages, ShaderType, TextureFormat,
-            TextureSampleType, UniformBuffer,
+            BindGroupLayout, BindGroupLayoutEntries, CachedRenderPipelineId, ColorTargetState,
+            ColorWrites, FragmentState, MultisampleState, PipelineCache, PrimitiveState,
+            RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
+            ShaderType, TextureFormat, TextureSampleType, UniformBuffer,
         },
         renderer::{RenderDevice, RenderQueue},
         texture::BevyDefault,
@@ -26,13 +25,20 @@ use bevy::{
         Extract, Render, RenderApp, RenderSet,
     },
 };
+
+#[cfg(feature = "edge-detection-material")]
+use bevy::core_pipeline::prepass::DeferredPrepass;
+
 use node::EdgeDetectionNode;
 
 pub mod prelude {
     pub use crate::{
-        traits::*, EdgeDetectionCamera, EdgeDetectionCameraMarkerBundle, EdgeDetectionConfig,
-        EdgeDetectionMaterial, EdgeDetectionPlugin, StandardEdgeDetectionMaterial,
+        EdgeDetectionCamera, EdgeDetectionCameraMarkerBundle, EdgeDetectionConfig,
+        EdgeDetectionPlugin,
     };
+
+    #[cfg(feature = "edge-detection-material")]
+    pub use super::edge_detection_material::{traits::*, *};
 }
 
 use crate::node::EdgeDetetctionNodeLabel;
@@ -40,18 +46,32 @@ use crate::node::EdgeDetetctionNodeLabel;
 mod node;
 
 pub const SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(410592619790336);
-pub const SHADER_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(410592619790337);
 
 pub struct EdgeDetectionPlugin;
 impl Plugin for EdgeDetectionPlugin {
     fn build(&self, app: &mut App) {
-        load_internal_asset!(app, SHADER_HANDLE, "edge_detection.wgsl", Shader::from_wgsl);
+        #[cfg(feature = "edge-detection-material")]
+        let shader_defs = vec!["EDGE_DETECTION_MATERIAL".into()];
+
+        #[cfg(not(feature = "edge-detection-material"))]
+        let shader_defs = vec![];
+
         load_internal_asset!(
             app,
-            SHADER_MATERIAL_HANDLE,
+            SHADER_HANDLE,
+            "edge_detection.wgsl",
+            Shader::from_wgsl_with_defs,
+            shader_defs
+        );
+
+        #[cfg(feature = "edge-detection-material")]
+        load_internal_asset!(
+            app,
+            edge_detection_material::SHADER_MATERIAL_HANDLE,
             "edge_detection_material.wgsl",
             Shader::from_wgsl
         );
+
         // app.add_systems(Update, print_projection);
 
         app.init_resource::<DefaultOpaqueRendererMethod>();
@@ -77,7 +97,6 @@ impl Plugin for EdgeDetectionPlugin {
                     Node3d::EndMainPass,
                     EdgeDetetctionNodeLabel,
                     Node3d::Tonemapping,
-                    // Node3d::DeferredPrepass, // adding this makes the app not start
                 ),
             );
     }
@@ -95,12 +114,14 @@ pub struct EdgeDetectionCamera;
 
 #[derive(Bundle)]
 /// Marker components needed for the camera to run the edgedetection post-processing
-/// The edge detection effect requires the depth, normal as deferred prepass, as well as a specific marker component
+/// The edge detection effect requires the depth, normal, as well as a specific marker component
+/// if edgedetection should be enabled on a per entity basis, the [`DeferredPrepass`] should be used as well.
 /// NOTE: they can all be added induvidially to the camera, in case some of the marker components are already present
 pub struct EdgeDetectionCameraMarkerBundle {
     camera: EdgeDetectionCamera,
     depth_prepass: DepthPrepass,
     normal_prepass: NormalPrepass,
+    #[cfg(feature = "edge-detection-material")]
     deferred_prepass: DeferredPrepass,
 }
 
@@ -114,8 +135,10 @@ pub struct EdgeDetectionConfig {
     pub color_threshold: f32,
     pub edge_color: Color,
     pub debug: u32,
+
     /// Determines if the edge detection should be for the entire screen,
     /// or only for entites with the correct material
+    #[cfg(feature = "edge-detection-material")]
     pub full_screen: u32,
 }
 
@@ -128,74 +151,86 @@ impl Default for EdgeDetectionConfig {
             color_threshold: 1.0,
             edge_color: Color::BLACK,
             debug: 0,
+            #[cfg(feature = "edge-detection-material")]
             full_screen: 1,
         }
     }
 }
 
-/// The Extended Material type for edge-detection post-processing
-pub type EdgeDetectionMaterial<B> = ExtendedMaterial<B, EdgeDetectionMaterialExtension>;
-pub type StandardEdgeDetectionMaterial = EdgeDetectionMaterial<StandardMaterial>;
-
-pub mod traits {
-    use bevy::pbr::{Material, OpaqueRendererMethod, StandardMaterial};
-
-    use crate::{
-        EdgeDetectionMaterial, EdgeDetectionMaterialExtension, StandardEdgeDetectionMaterial,
+#[cfg(feature = "edge-detection-material")]
+pub mod edge_detection_material {
+    use bevy::{
+        asset::{Asset, Handle},
+        pbr::{ExtendedMaterial, MaterialExtension, StandardMaterial},
+        reflect::Reflect,
+        render::render_resource::{AsBindGroup, ShaderRef},
     };
+    pub const SHADER_MATERIAL_HANDLE: Handle<Shader> = Handle::weak_from_u128(410592619790337);
+    use bevy::render::render_resource::Shader;
 
-    /// have trait to make it easier to generate the material from standard material
-    pub trait ToEdgeMaterial: Material {
-        fn to_edge_material(self) -> EdgeDetectionMaterial<Self> {
-            EdgeDetectionMaterial {
-                base: self,
-                extension: EdgeDetectionMaterialExtension::default(),
+    /// The Extended Material type for edge-detection post-processing
+    pub type EdgeDetectionMaterial<B> = ExtendedMaterial<B, EdgeDetectionMaterialExtension>;
+    pub type StandardEdgeDetectionMaterial = EdgeDetectionMaterial<StandardMaterial>;
+
+    pub mod traits {
+        use bevy::pbr::{Material, OpaqueRendererMethod, StandardMaterial};
+
+        use super::{
+            EdgeDetectionMaterial, EdgeDetectionMaterialExtension, StandardEdgeDetectionMaterial,
+        };
+
+        /// have trait to make it easier to generate the material from standard material
+        pub trait ToEdgeMaterial: Material {
+            fn to_edge_material(self) -> EdgeDetectionMaterial<Self> {
+                EdgeDetectionMaterial {
+                    base: self,
+                    extension: EdgeDetectionMaterialExtension::default(),
+                }
+            }
+        }
+
+        impl ToEdgeMaterial for StandardMaterial {
+            fn to_edge_material(mut self) -> EdgeDetectionMaterial<StandardMaterial> {
+                self.opaque_render_method = OpaqueRendererMethod::Deferred;
+                EdgeDetectionMaterial {
+                    base: self,
+                    extension: EdgeDetectionMaterialExtension::default(),
+                }
+            }
+        }
+
+        /// have trait to make it easier to generate the material from standard material
+        pub trait FromEdgeMaterial<B: Material> {
+            fn from_edge_material(self) -> B;
+        }
+
+        impl FromEdgeMaterial<StandardMaterial> for StandardEdgeDetectionMaterial {
+            fn from_edge_material(self) -> StandardMaterial {
+                self.base
             }
         }
     }
 
-    impl ToEdgeMaterial for StandardMaterial {
-        fn to_edge_material(mut self) -> EdgeDetectionMaterial<StandardMaterial> {
-            self.opaque_render_method = OpaqueRendererMethod::Deferred;
-            EdgeDetectionMaterial {
-                base: self,
-                extension: EdgeDetectionMaterialExtension::default(),
-            }
+    #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+    /// Material that will enable the postprocess Edge detection effect on a specific entity, instead of entire screen
+    pub struct EdgeDetectionMaterialExtension {
+        #[uniform(100)]
+        _phantom: u32,
+    }
+
+    impl Default for EdgeDetectionMaterialExtension {
+        fn default() -> Self {
+            Self { _phantom: 0 }
         }
     }
 
-    /// have trait to make it easier to generate the material from standard material
-    pub trait FromEdgeMaterial<B: Material> {
-        fn from_edge_material(self) -> B;
-    }
-
-    impl FromEdgeMaterial<StandardMaterial> for StandardEdgeDetectionMaterial {
-        fn from_edge_material(self) -> StandardMaterial {
-            self.base
+    impl MaterialExtension for EdgeDetectionMaterialExtension {
+        /// this material will only work in in deferred rendering
+        fn deferred_fragment_shader() -> ShaderRef {
+            SHADER_MATERIAL_HANDLE.into()
         }
     }
 }
-
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
-/// Material that will enable the postprocess Edge detection effect on a specific entity, instead of entire screen
-pub struct EdgeDetectionMaterialExtension {
-    #[uniform(100)]
-    _phantom: u32,
-}
-
-impl Default for EdgeDetectionMaterialExtension {
-    fn default() -> Self {
-        Self { _phantom: 0 }
-    }
-}
-
-impl MaterialExtension for EdgeDetectionMaterialExtension {
-    /// this material will only work in in deferred rendering
-    fn deferred_fragment_shader() -> ShaderRef {
-        SHADER_MATERIAL_HANDLE.into()
-    }
-}
-
 #[derive(Resource)]
 struct ConfigBuffer {
     buffer: UniformBuffer<EdgeDetectionConfig>,
@@ -260,9 +295,8 @@ impl FromWorld for EdgeDetectionPipeline {
                     // config
                     uniform_buffer_sized(false, None),
                     // deferred_texture
+                    #[cfg(feature = "edge-detection-material")]
                     texture_2d(TextureSampleType::Uint),
-                    // // deferred prepass
-                    // texture_2d(TextureSampleType::Float { filterable: true }),
                 ),
             ),
         );
