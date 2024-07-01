@@ -138,8 +138,7 @@ pub struct EdgeDetectionConfig {
 
     /// Determines if the edge detection should be for the entire screen,
     /// or only for entites with the correct material
-    #[cfg(feature = "edge-detection-material")]
-    pub full_screen: u32,
+    pub full_screen_enabled: u32,
 }
 
 impl Default for EdgeDetectionConfig {
@@ -151,8 +150,7 @@ impl Default for EdgeDetectionConfig {
             color_threshold: 1.0,
             edge_color: Color::BLACK,
             debug: 0,
-            #[cfg(feature = "edge-detection-material")]
-            full_screen: 1,
+            full_screen_enabled: 1,
         }
     }
 }

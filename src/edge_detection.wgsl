@@ -9,9 +9,7 @@ struct Config {
     color_threshold: f32,
     edge_color: vec4f,
     debug: u32,
-    #ifdef EDGE_DETECTION_MATERIAL
-    full_screen: u32,
-    #endif
+    full_screen_enabled: u32,
 };
 
 @group(0) @binding(0) var screen_texture: texture_2d<f32>;
@@ -202,11 +200,11 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4f {
     
     let frag_coord = in.position.xy;
     
-    #ifdef EDGE_DETECTION_MATERIAL
-    let should_draw_edge: bool = detect_edge_mask(frag_coord);
-    if config.full_screen == 1u || should_draw_edge {
-    #endif
-    
+    var should_draw_edge: bool = config.full_screen_enabled == 1u;
+#ifdef EDGE_DETECTION_MATERIAL
+    should_draw_edge = detect_edge_mask(frag_coord) || should_draw_edge;
+#endif
+    if should_draw_edge {
         let edge_depth = detect_edge_depth(frag_coord);
         let edge_normal = detect_edge_normal(frag_coord);
         let edge_color = detect_edge_color(frag_coord);
@@ -219,9 +217,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4f {
         if edge > 0.01 {
             return config.edge_color;
         }
-    #ifdef EDGE_DETECTION_MATERIAL
     }
-    #endif
 
     return color;
 }
