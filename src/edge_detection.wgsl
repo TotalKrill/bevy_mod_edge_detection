@@ -1,7 +1,6 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 #import bevy_render::view::View
 #import bevy_pbr::pbr_deferred_functions::pbr_input_from_deferred_gbuffer
-// #import bevy_pbr::mesh_view_bindings::deferred_prepass_texture
 
 struct Config {
     thickness: f32,
